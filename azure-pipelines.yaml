@@ -1,0 +1,78 @@
+# Azure Pipeline for Flask Dice Roller
+# Student: X00155165
+# CA3 - DevOps
+
+trigger:
+  branches:
+    include:
+    - main
+    - development
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  pythonVersion: '3.11'
+
+stages:
+- stage: Build
+  displayName: 'Build and Test'
+  jobs:
+  - job: BuildAndTest
+    displayName: 'Build, Test, and Analyze'
+    steps:
+    
+    - task: UsePythonVersion@0
+      displayName: 'Use Python $(pythonVersion)'
+      inputs:
+        versionSpec: '$(pythonVersion)'
+        addToPath: true
+    
+    - script: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+      displayName: 'Install dependencies'
+    
+    - script: |
+        pytest --cov=app --cov-report=xml --cov-report=html --junitxml=test-results.xml -v
+      displayName: 'Run tests with coverage'
+    
+    - task: PublishTestResults@2
+      displayName: 'Publish test results'
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '**/test-results.xml'
+        failTaskOnFailedTests: true
+      condition: always()
+    
+    - task: PublishCodeCoverageResults@1
+      displayName: 'Publish coverage results'
+      inputs:
+        codeCoverageTool: 'Cobertura'
+        summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
+        reportDirectory: '$(System.DefaultWorkingDirectory)/htmlcov'
+    
+    - script: |
+        COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(float(tree.getroot().attrib['line-rate']) * 100)")
+        echo "Coverage: $COVERAGE%"
+        if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+          echo "##vso[task.logissue type=error]Coverage below 80%"
+          exit 1
+        fi
+      displayName: 'Enforce 80% coverage'
+    
+    - script: |
+        pip install flake8
+        flake8 app/ --max-line-length=120 --exit-zero
+      displayName: 'Run Flake8 linting'
+    
+    - script: |
+        pip install bandit
+        bandit -r app/ -f txt --exit-zero
+      displayName: 'Run Bandit security scan'
+    
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publish build artifacts'
+      inputs:
+        pathToPublish: '$(System.DefaultWorkingDirectory)'
+        artifactName: 'flask-app'
