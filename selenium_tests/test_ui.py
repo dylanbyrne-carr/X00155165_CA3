@@ -1,4 +1,11 @@
+"""
+Selenium UI Tests for Flask Dice Roller
+Student: X00155165
+CA3 - DevOps
+"""
+
 import pytest
+import time
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.options import Options
@@ -53,9 +60,9 @@ class TestLogin:
         driver.find_element(By.NAME, 'password').send_keys('password')
         driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
         
-        # Wait for redirect
+        # Wait for URL to change to dashboard
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.TAG_NAME, 'h1'))
+            EC.url_contains('/dashboard')
         )
         
         # Verify on dashboard
@@ -68,6 +75,9 @@ class TestLogin:
         driver.find_element(By.NAME, 'username').send_keys('user')
         driver.find_element(By.NAME, 'password').send_keys('wrongpassword')
         driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
+        
+        # Wait for page to reload with error
+        time.sleep(1)
         
         # Should see error message
         assert 'Invalid username or password' in driver.page_source
@@ -84,8 +94,9 @@ class TestDashboard:
         driver.find_element(By.NAME, 'password').send_keys('password')
         driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
         
+        # Wait for dashboard
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.NAME, 'num_dice'))
+            EC.url_contains('/dashboard')
         )
         
         # Roll dice
@@ -95,10 +106,10 @@ class TestDashboard:
         driver.find_element(By.NAME, 'sides').send_keys('6')
         driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
         
+        # Wait for result
+        time.sleep(1)
+        
         # Should see roll result
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CLASS_NAME, 'bg-green-100'))
-        )
         assert 'Rolled 2d6' in driver.page_source
 
 
@@ -113,12 +124,16 @@ class TestLogout:
         driver.find_element(By.NAME, 'password').send_keys('password')
         driver.find_element(By.CSS_SELECTOR, 'button[type="submit"]').click()
         
+        # Wait for dashboard
         WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.LINK_TEXT, 'Logout (user)'))
+            EC.url_contains('/dashboard')
         )
         
         # Logout
         driver.find_element(By.LINK_TEXT, 'Logout (user)').click()
+        
+        # Wait for redirect
+        time.sleep(1)
         
         # Should see logged out message
         assert 'logged out' in driver.page_source.lower()

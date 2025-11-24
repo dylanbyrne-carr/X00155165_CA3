@@ -5,220 +5,219 @@
 trigger:
   branches:
     include:
-    - main
-    - development
+      - main
+      - development
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: "ubuntu-latest"
 
 variables:
-  pythonVersion: '3.11'
+  pythonVersion: "3.11"
 
 stages:
-# ========== BUILD STAGE ==========
-- stage: Build
-  displayName: 'Build and Test'
-  jobs:
-  - job: BuildAndTest
-    displayName: 'Build, Test, and Analyze'
-    steps:
-    
-    - task: UsePythonVersion@0
-      displayName: 'Use Python $(pythonVersion)'
-      inputs:
-        versionSpec: '$(pythonVersion)'
-        addToPath: true
-    
-    - script: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-      displayName: 'Install dependencies'
-    
-    - script: |
-        pytest tests/ --cov=app --cov-report=xml --cov-report=html --junitxml=test-results.xml -v
-      displayName: 'Run unit tests with coverage'
-    
-    - task: PublishTestResults@2
-      displayName: 'Publish test results'
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: '**/test-results.xml'
-        failTaskOnFailedTests: true
-      condition: always()
-    
-    - task: PublishCodeCoverageResults@1
-      displayName: 'Publish coverage results'
-      inputs:
-        codeCoverageTool: 'Cobertura'
-        summaryFileLocation: '$(System.DefaultWorkingDirectory)/coverage.xml'
-        reportDirectory: '$(System.DefaultWorkingDirectory)/htmlcov'
-    
-    - script: |
-        COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(float(tree.getroot().attrib['line-rate']) * 100)")
-        echo "Coverage: $COVERAGE%"
-        if (( $(echo "$COVERAGE < 80" | bc -l) )); then
-          echo "##vso[task.logissue type=error]Coverage below 80%"
-          exit 1
-        fi
-      displayName: 'Enforce 80% coverage'
-    
-    - script: |
-        pip install flake8
-        flake8 app/ --max-line-length=120 --exit-zero
-      displayName: 'Run Flake8 linting'
-    
-    - script: |
-        pip install bandit
-        bandit -r app/ -f txt --exit-zero
-      displayName: 'Run Bandit security scan'
-    
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish build artifacts'
-      inputs:
-        pathToPublish: '$(System.DefaultWorkingDirectory)'
-        artifactName: 'flask-app'
+  # ========== BUILD STAGE ==========
+  - stage: Build
+    displayName: "Build and Test"
+    jobs:
+      - job: BuildAndTest
+        displayName: "Build, Test, and Analyze"
+        steps:
+          - task: UsePythonVersion@0
+            displayName: "Use Python $(pythonVersion)"
+            inputs:
+              versionSpec: "$(pythonVersion)"
+              addToPath: true
 
-# ========== UAT TESTING STAGE ==========
-- stage: UAT
-  displayName: 'UAT Testing'
-  dependsOn: Build
-  jobs:
-  - job: SeleniumTests
-    displayName: 'Selenium UI Tests'
-    steps:
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '$(pythonVersion)'
-    
-    - script: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-      displayName: 'Install dependencies'
-    
-    - script: |
-        # Install Chrome
-        wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
-        sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
-        sudo apt-get update
-        sudo apt-get install -y google-chrome-stable
-      displayName: 'Install Chrome'
-    
-    - script: |
-        # Start Flask app in background
-        python run.py &
-        sleep 5
-        echo "Flask app started"
-      displayName: 'Start Flask app'
-    
-    - script: |
-        pytest selenium_tests/ -v --junitxml=selenium-results.xml
-      displayName: 'Run Selenium tests'
-    
-    - task: PublishTestResults@2
-      displayName: 'Publish Selenium results'
-      inputs:
-        testResultsFormat: 'JUnit'
-        testResultsFiles: '**/selenium-results.xml'
-        testRunTitle: 'Selenium UAT Tests'
-      condition: always()
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: "Install dependencies"
 
-# ========== PERFORMANCE TESTING STAGE ==========
-- stage: PerformanceTest
-  displayName: 'Performance Testing'
-  dependsOn: Build
-  jobs:
-  - job: JMeterTests
-    displayName: 'JMeter Performance Tests'
-    steps:
-    - task: UsePythonVersion@0
-      inputs:
-        versionSpec: '$(pythonVersion)'
-    
-    - script: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-      displayName: 'Install dependencies'
-    
-    - script: |
-        # Install JMeter
-        sudo apt-get update
-        sudo apt-get install -y default-jre
-        wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
-        tar -xzf apache-jmeter-5.6.3.tgz
-        echo "JMeter installed"
-      displayName: 'Install JMeter'
-    
-    - script: |
-        # Start Flask app in background
-        python run.py &
-        sleep 5
-        echo "Flask app started"
-      displayName: 'Start Flask app'
-    
-    - script: |
-        # Run JMeter test
-        apache-jmeter-5.6.3/bin/jmeter -n -t performance-tests/dice-roller-test.jmx -l results.jtl -e -o jmeter-report
-      displayName: 'Run JMeter tests'
-    
-    - task: PublishBuildArtifacts@1
-      displayName: 'Publish JMeter report'
-      inputs:
-        pathToPublish: 'jmeter-report'
-        artifactName: 'jmeter-report'
-      condition: always()
+          - script: |
+              pytest tests/ --cov=app --cov-report=xml --cov-report=html --junitxml=test-results.xml -v
+            displayName: "Run unit tests with coverage"
 
-# ========== DEPLOY TO TEST ==========
-- stage: DeployTest
-  displayName: 'Deploy to Test'
-  dependsOn: 
-    - UAT
-    - PerformanceTest
-  jobs:
-  - deployment: DeployTest
-    displayName: 'Deploy to Test Environment'
-    environment: 'Test'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: flask-app
-          
+          - task: PublishTestResults@2
+            displayName: "Publish test results"
+            inputs:
+              testResultsFormat: "JUnit"
+              testResultsFiles: "**/test-results.xml"
+              failTaskOnFailedTests: true
+            condition: always()
+
+          - task: PublishCodeCoverageResults@1
+            displayName: "Publish coverage results"
+            inputs:
+              codeCoverageTool: "Cobertura"
+              summaryFileLocation: "$(System.DefaultWorkingDirectory)/coverage.xml"
+              reportDirectory: "$(System.DefaultWorkingDirectory)/htmlcov"
+
+          - script: |
+              COVERAGE=$(python -c "import xml.etree.ElementTree as ET; tree = ET.parse('coverage.xml'); print(float(tree.getroot().attrib['line-rate']) * 100)")
+              echo "Coverage: $COVERAGE%"
+              if (( $(echo "$COVERAGE < 80" | bc -l) )); then
+                echo "##vso[task.logissue type=error]Coverage below 80%"
+                exit 1
+              fi
+            displayName: "Enforce 80% coverage"
+
+          - script: |
+              pip install flake8
+              flake8 app/ --max-line-length=120 --exit-zero
+            displayName: "Run Flake8 linting"
+
+          - script: |
+              pip install bandit
+              bandit -r app/ -f txt --exit-zero
+            displayName: "Run Bandit security scan"
+
+          - task: PublishBuildArtifacts@1
+            displayName: "Publish build artifacts"
+            inputs:
+              pathToPublish: "$(System.DefaultWorkingDirectory)"
+              artifactName: "flask-app"
+
+  # ========== UAT TESTING STAGE ==========
+  - stage: UAT
+    displayName: "UAT Testing"
+    dependsOn: Build
+    jobs:
+      - job: SeleniumTests
+        displayName: "Selenium UI Tests"
+        steps:
           - task: UsePythonVersion@0
             inputs:
-              versionSpec: '$(pythonVersion)'
-          
-          - script: |
-              echo "Deploying to TEST environment..."
-              cd $(Pipeline.Workspace)/flask-app
-              pip install -r requirements.txt
-              python -c "from app import create_app; app = create_app(); print('App creates successfully')"
-              echo "Application deployed to TEST"
-            displayName: 'Deploy application'
+              versionSpec: "$(pythonVersion)"
 
-# ========== DEPLOY TO PROD ==========
-- stage: DeployProd
-  displayName: 'Deploy to Prod'
-  dependsOn: DeployTest
-  jobs:
-  - deployment: DeployProd
-    displayName: 'Deploy to Prod Environment'
-    environment: 'Prod'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - download: current
-            artifact: flask-app
-          
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r requirements.txt
+            displayName: "Install dependencies"
+
+          - script: |
+              # Install Chrome
+              wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+              sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+              sudo apt-get update
+              sudo apt-get install -y google-chrome-stable
+            displayName: "Install Chrome"
+
+          - script: |
+              # Start Flask app in background
+              python run.py &
+              sleep 5
+              echo "Flask app started"
+            displayName: "Start Flask app"
+
+          - script: |
+              pytest selenium_tests/ -v --junitxml=selenium-results.xml
+            displayName: "Run Selenium tests"
+
+          - task: PublishTestResults@2
+            displayName: "Publish Selenium results"
+            inputs:
+              testResultsFormat: "JUnit"
+              testResultsFiles: "**/selenium-results.xml"
+              testRunTitle: "Selenium UAT Tests"
+            condition: always()
+
+  # ========== PERFORMANCE TESTING STAGE ==========
+  - stage: PerformanceTest
+    displayName: "Performance Testing"
+    dependsOn: Build
+    jobs:
+      - job: JMeterTests
+        displayName: "JMeter Performance Tests"
+        steps:
           - task: UsePythonVersion@0
             inputs:
-              versionSpec: '$(pythonVersion)'
-          
+              versionSpec: "$(pythonVersion)"
+
           - script: |
-              echo "Deploying to PROD environment..."
-              cd $(Pipeline.Workspace)/flask-app
+              python -m pip install --upgrade pip
               pip install -r requirements.txt
-              python -c "from app import create_app; app = create_app(); print('App creates successfully')"
-              echo "Application deployed to PROD"
-            displayName: 'Deploy application'
+            displayName: "Install dependencies"
+
+          - script: |
+              # Install JMeter
+              sudo apt-get update
+              sudo apt-get install -y default-jre
+              wget -q https://archive.apache.org/dist/jmeter/binaries/apache-jmeter-5.6.3.tgz
+              tar -xzf apache-jmeter-5.6.3.tgz
+              echo "JMeter installed"
+            displayName: "Install JMeter"
+
+          - script: |
+              # Start Flask app in background
+              python run.py &
+              sleep 5
+              echo "Flask app started"
+            displayName: "Start Flask app"
+
+          - script: |
+              # Run JMeter test
+              apache-jmeter-5.6.3/bin/jmeter -n -t performance_tests/dice-roller-test.jmx -l results.jtl -e -o jmeter-report
+            displayName: "Run JMeter tests"
+
+          - task: PublishBuildArtifacts@1
+            displayName: "Publish JMeter report"
+            inputs:
+              pathToPublish: "jmeter-report"
+              artifactName: "jmeter-report"
+            condition: always()
+
+  # ========== DEPLOY TO TEST ==========
+  - stage: DeployTest
+    displayName: "Deploy to Test"
+    dependsOn:
+      - UAT
+      - PerformanceTest
+    jobs:
+      - deployment: DeployTest
+        displayName: "Deploy to Test Environment"
+        environment: "Test"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: flask-app
+
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: "$(pythonVersion)"
+
+                - script: |
+                    echo "Deploying to TEST environment..."
+                    cd $(Pipeline.Workspace)/flask-app
+                    pip install -r requirements.txt
+                    python -c "from app import create_app; app = create_app(); print('App creates successfully')"
+                    echo "Application deployed to TEST"
+                  displayName: "Deploy application"
+
+  # ========== DEPLOY TO PROD ==========
+  - stage: DeployProd
+    displayName: "Deploy to Prod"
+    dependsOn: DeployTest
+    jobs:
+      - deployment: DeployProd
+        displayName: "Deploy to Prod Environment"
+        environment: "Prod"
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: flask-app
+
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: "$(pythonVersion)"
+
+                - script: |
+                    echo "Deploying to PROD environment..."
+                    cd $(Pipeline.Workspace)/flask-app
+                    pip install -r requirements.txt
+                    python -c "from app import create_app; app = create_app(); print('App creates successfully')"
+                    echo "Application deployed to PROD"
+                  displayName: "Deploy application"
