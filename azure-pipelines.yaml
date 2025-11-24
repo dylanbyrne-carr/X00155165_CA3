@@ -15,6 +15,7 @@ variables:
   pythonVersion: '3.11'
 
 stages:
+# ========== BUILD STAGE ==========
 - stage: Build
   displayName: 'Build and Test'
   jobs:
@@ -76,3 +77,69 @@ stages:
       inputs:
         pathToPublish: '$(System.DefaultWorkingDirectory)'
         artifactName: 'flask-app'
+
+# ========== DEPLOY TO TEST ==========
+- stage: DeployTest
+  displayName: 'Deploy to Test'
+  dependsOn: Build
+  jobs:
+  - deployment: DeployTest
+    displayName: 'Deploy to Test Environment'
+    environment: 'Test'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: flask-app
+          
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+          
+          - script: |
+              echo "Deploying to TEST environment..."
+              cd $(Pipeline.Workspace)/flask-app
+              pip install -r requirements.txt
+              echo "Application deployed to TEST"
+            displayName: 'Deploy application'
+          
+          - script: |
+              echo "Running smoke tests on TEST..."
+              cd $(Pipeline.Workspace)/flask-app
+              python -c "from app import create_app; app = create_app(); print('App creates successfully')"
+              echo "Smoke tests passed"
+            displayName: 'Run smoke tests'
+
+# ========== DEPLOY TO PROD ==========
+- stage: DeployProd
+  displayName: 'Deploy to Prod'
+  dependsOn: DeployTest
+  jobs:
+  - deployment: DeployProd
+    displayName: 'Deploy to Prod Environment'
+    environment: 'Prod'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - download: current
+            artifact: flask-app
+          
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+          
+          - script: |
+              echo "Deploying to PROD environment..."
+              cd $(Pipeline.Workspace)/flask-app
+              pip install -r requirements.txt
+              echo "Application deployed to PROD"
+            displayName: 'Deploy application'
+          
+          - script: |
+              echo "Running smoke tests on PROD..."
+              cd $(Pipeline.Workspace)/flask-app
+              python -c "from app import create_app; app = create_app(); print('App creates successfully')"
+              echo "Smoke tests passed"
+            displayName: 'Run smoke tests'
