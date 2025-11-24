@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}Welcome - Dice Roller{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-bold mb-4">Welcome to Dice Roller!</h1>
+<p class="text-gray-600 mb-6">A dice rolling app with history and statistics.</p>
+
+{% if current_user.is_authenticated %}
+    <p class="mb-4">Logged in as <strong>{{ current_user.username }}</strong></p>
+    <a href="{{ url_for('main.dashboard') }}" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Go to Dashboard</a>
+{% else %}
+    <p class="mb-4">
+        <a href="{{ url_for('main.login') }}" class="text-blue-500 hover:underline">Login</a> to start rolling.
+    </p>
+    <p class="text-gray-500 text-sm">Demo: username <code class="bg-gray-200 px-1 rounded">user</code>, password <code class="bg-gray-200 px-1 rounded">password</code></p>
+{% endif %}
+{% endblock %}

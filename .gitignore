@@ -1,0 +1,25 @@
+# Virtual environment
+env/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Testing
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+test-results.xml
+
+# IDE
+.vscode/
+.idea/
+
+# JMeter
+*.jtl
+*.log
+
+# Environment
+.env
